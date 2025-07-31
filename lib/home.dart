@@ -16,6 +16,8 @@ class _QRScanPageState extends State<QRScanPage> {
   bool _torchEnabled = false;
   String _qrResult = 'Apunta al QR…';
   bool isScanned = false;
+  bool?
+      _isRedeban; // null = no leído, true = sí es Redeban, false = no es Redeban
 
   @override
   void dispose() {
@@ -28,12 +30,18 @@ class _QRScanPageState extends State<QRScanPage> {
     setState(() {
       _qrResult = 'Apunta al QR…';
       isScanned = false;
+      _isRedeban = null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _isRedeban == null
+          ? Colors.white // antes de escanear
+          : _isRedeban == true
+              ? Colors.green[200] // válido de Redeban
+              : Colors.red[200], // inválido / no Redeban
       appBar: AppBar(
         title: const Text('Prueba aislada lector de QR'),
         actions: [
@@ -62,19 +70,21 @@ class _QRScanPageState extends State<QRScanPage> {
                       final parsedQr = EmvcoQrPayloadModel.fromPayload(code);
                       setState(() {
                         _qrResult = '''
-                        Formato: ${parsedQr.payloadFormat}
-                        Tipo: ${parsedQr.initiationMethod}
-                        Comercio: ${parsedQr.merchantName}
-                        Ciudad: ${parsedQr.merchantCity}
-                        Monto: ${parsedQr.transactionAmount}
-                        Moneda: ${parsedQr.currencyCode}
-                        CRC: ${parsedQr.crc}
+Formato: ${parsedQr.payloadFormat}
+Tipo: ${parsedQr.initiationMethod}
+Comercio: ${parsedQr.merchantName}
+Ciudad: ${parsedQr.merchantCity}
+Monto: ${parsedQr.transactionAmount}
+Moneda: ${parsedQr.currencyCode}
+CRC: ${parsedQr.crc}
                         ''';
+                        _isRedeban = true; // si no lanzó excepción es Redeban
                         isScanned = true;
                       });
                     } catch (e) {
                       setState(() {
-                        _qrResult = 'Error al procesar el QR: $e';
+                        _qrResult = 'Error al procesar el QR:\n$e';
+                        _isRedeban = false; // no es Redeban
                         isScanned = true;
                       });
                     }

@@ -7,25 +7,17 @@
 
 //Formato EMVCo = siempre [TAG][LENGTH][VALUE].
 //web para generar payloads:
-
 class EmvcoQrPayloadModel {
-  final String
-      payloadFormat; //Tag 00: versión del estándar EMVCo (siempre "01")
-  final String
-      initiationMethod; //Tag 01: indica si el QR es Estático, Dinámico o Estático con valor
-  final String
-      merchantCategoryCode; //Tag 52: código MCC (categoría de comercio según ISO 18245)
-  final String
-      countryCode; //Tag 58: país en formato ISO 3166-1 alfa-2 (ej: "CO")
-  final String merchantName; //Tag 59: nombre del comercio
-  final String merchantCity; //Tag 60: ciudad donde está registrado el comercio
-  final String
-      currencyCode; //Tag 53: moneda en formato ISO 4217 (ej: COP = 170)
-  final double
-      transactionAmount; //Tag 54: monto de la transacción (puede ser 0 en QR estáticos)
-  final String crc; //Tag 63: CRC de validación (checksum del QR)
-  final Map<String, dynamic>
-      additionalFields; // Campos adicionales no mapeados directamente (incluye subtags como el Tag 26)
+  final String payloadFormat; // Tag 00
+  final String initiationMethod; // Tag 01
+  final String merchantCategoryCode; // Tag 52
+  final String countryCode; // Tag 58
+  final String merchantName; // Tag 59
+  final String merchantCity; // Tag 60
+  final String currencyCode; // Tag 53
+  final double transactionAmount; // Tag 54
+  final String crc; // Tag 63
+  final Map<String, dynamic> additionalFields; // campos extra (debug)
 
   EmvcoQrPayloadModel({
     required this.payloadFormat,
@@ -41,11 +33,9 @@ class EmvcoQrPayloadModel {
   });
 
   factory EmvcoQrPayloadModel.fromPayload(String payload) {
-    // Map de guardado
     final parsed = <String, String>{};
     int index = 0;
 
-    // Mientras queden al menos 4 caracteres por leer: (tag + length)
     while (index + 4 <= payload.length) {
       final id = payload.substring(index, index + 2);
       index += 2;
@@ -65,11 +55,10 @@ class EmvcoQrPayloadModel {
 
       final value = payload.substring(index, index + len);
       index += len;
-
       parsed[id] = value;
     }
 
-    // Función auxiliar para parsear "templates": subtags dentro del valor (ej. Tag 26)
+    // función para parsear templates
     Map<String, String> parseTemplate(String raw) {
       final map = <String, String>{};
       int idx = 0;
@@ -94,7 +83,21 @@ class EmvcoQrPayloadModel {
     final merchantAccountInfo =
         parsed.containsKey('26') ? parseTemplate(parsed['26']!) : {};
 
-    // interpretar el tipo de QR según Tag 01 y el monto (Tag 54)
+    final acquirerNetworkInfo =
+        parsed.containsKey('49') ? parseTemplate(parsed['49']!) : {};
+
+    // Validar que sea Redeban
+    final gui = acquirerNetworkInfo['00'];
+    final networkId = acquirerNetworkInfo['01'];
+
+    if (gui != 'CO.COM.RBM.RED' && networkId != 'RBM') {
+      throw const FormatException("QR inválido (no es de Redeban)");
+    } else {
+      //es Redeban, QR correcto
+      //TODO: Llamar al validate para saber a que llave pertenece (tipo alias de tal persona, etc)
+    }
+
+    // Interpretar tipo de QR
     String initiationType(String? code, String? amount) {
       if (code == '12') return 'Dinámico';
       if (code == '11' && (double.tryParse(amount ?? '') ?? 0) > 0) {
@@ -103,7 +106,6 @@ class EmvcoQrPayloadModel {
       return 'Estático';
     }
 
-    // Limpiar posibles caracteres no numéricos del monto
     final rawAmt = parsed['54'] ?? '';
     final cleanAmt = rawAmt.replaceAll(RegExp(r'[^0-9.]'), '');
     final amt = double.tryParse(cleanAmt) ?? 0.0;
@@ -121,6 +123,7 @@ class EmvcoQrPayloadModel {
       additionalFields: {
         ...parsed,
         if (merchantAccountInfo.isNotEmpty) '26_subtags': merchantAccountInfo,
+        if (acquirerNetworkInfo.isNotEmpty) '49_subtags': acquirerNetworkInfo,
       },
     );
   }
