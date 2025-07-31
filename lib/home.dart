@@ -15,11 +15,20 @@ class _QRScanPageState extends State<QRScanPage> {
 
   bool _torchEnabled = false;
   String _qrResult = 'Apunta al QR…';
+  bool isScanned = false;
 
   @override
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  void _resetScanner() {
+    controller.start();
+    setState(() {
+      _qrResult = 'Apunta al QR…';
+      isScanned = false;
+    });
   }
 
   @override
@@ -30,33 +39,29 @@ class _QRScanPageState extends State<QRScanPage> {
         actions: [
           IconButton(
             icon: Icon(
-              _torchEnabled ? Icons.flashlight_on : Icons.flashlight_off,
-            ),
+                _torchEnabled ? Icons.flashlight_on : Icons.flashlight_off),
             onPressed: () {
               controller.toggleTorch();
-              setState(() {
-                _torchEnabled = !_torchEnabled;
-              });
+              setState(() => _torchEnabled = !_torchEnabled);
             },
           ),
         ],
       ),
       body: Column(
         children: [
-          Expanded(
-            flex: 4,
-            child: MobileScanner(
-              controller: controller,
-              onDetect: (capture) {
-                final code = capture.barcodes.first.rawValue;
-                if (code != null && mounted) {
-                  controller.stop(); // Detener después de leer un QR
-                  try {
-                    final parsedQr = EmvcoQrPayloadModel.fromPayload(code);
-
-                    // Mostrar información clave del QR
-                    setState(() {
-                      _qrResult = '''
+          if (!isScanned) ...[
+            Expanded(
+              flex: 4,
+              child: MobileScanner(
+                controller: controller,
+                onDetect: (capture) {
+                  final code = capture.barcodes.first.rawValue;
+                  if (code != null && mounted) {
+                    controller.stop(); // Detiene tras escaneo exitoso
+                    try {
+                      final parsedQr = EmvcoQrPayloadModel.fromPayload(code);
+                      setState(() {
+                        _qrResult = '''
                         Formato: ${parsedQr.payloadFormat}
                         Tipo: ${parsedQr.initiationMethod}
                         Comercio: ${parsedQr.merchantName}
@@ -65,30 +70,42 @@ class _QRScanPageState extends State<QRScanPage> {
                         Moneda: ${parsedQr.currencyCode}
                         CRC: ${parsedQr.crc}
                         ''';
-                    });
-                  } catch (e) {
-                    // Si ocurre algún error al parsear
-                    setState(() {
-                      _qrResult = 'Error al procesar el QR: $e';
-                    });
+                        isScanned = true;
+                      });
+                    } catch (e) {
+                      setState(() {
+                        _qrResult = 'Error al procesar el QR: $e';
+                        isScanned = true;
+                      });
+                    }
                   }
-                }
-              },
+                },
+              ),
             ),
-          ),
+          ],
           Expanded(
             flex: 1,
-            child: SingleChildScrollView(
-              child: Center(
-                child: Text(
-                  'Resultado del QR:\n$_qrResult',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
+            child: Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Resultado del QR:\n$_qrResult',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _resetScanner,
+        child: const Icon(Icons.refresh),
       ),
     );
   }

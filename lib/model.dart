@@ -6,7 +6,7 @@
 // El toString es para debug.
 
 //Formato EMVCo = siempre [TAG][LENGTH][VALUE].
-//web para generar payloads: https://www.omqrc.com/emvco-qr-code-generator
+//web para generar payloads:
 
 class EmvcoQrPayloadModel {
   final String
@@ -43,96 +43,85 @@ class EmvcoQrPayloadModel {
   factory EmvcoQrPayloadModel.fromPayload(String payload) {
     // Map de guardado
     final parsed = <String, String>{};
-
     int index = 0;
 
-    // Mientras queden al menos 4 caracteres por leer:
-    // (2 para el tag y 2 para la length).
+    // Mientras queden al menos 4 caracteres por leer: (tag + length)
     while (index + 4 <= payload.length) {
       final id = payload.substring(index, index + 2);
       index += 2;
 
-      final len = int.parse(payload.substring(index, index + 2));
+      final lenText = payload.substring(index, index + 2);
+      final len = int.tryParse(lenText);
+      if (len == null) {
+        throw FormatException(
+            '\nPayload: $payload\nLongitud inválida "$lenText" en posición $index para tag $id');
+      }
       index += 2;
 
-      // Value: el contenido real del campo, cuya longitud depende de [len]
+      if (index + len > payload.length) {
+        throw FormatException(
+            '\nPayload: $payload\nValor para tag $id excede longitud al final del payload');
+      }
+
       final value = payload.substring(index, index + len);
       index += len;
 
       parsed[id] = value;
     }
 
-    // Función auxiliar para parsear "templates":
-    // Son valores que dentro de sí contienen subtags (ejemplo: Tag 26)
+    // Función auxiliar para parsear "templates": subtags dentro del valor (ej. Tag 26)
     Map<String, String> parseTemplate(String raw) {
       final map = <String, String>{};
       int idx = 0;
-
-      // Misma lógica anterior, pero aplicada dentro del valor de un tag
       while (idx + 4 <= raw.length) {
-        final subId = raw.substring(idx, idx + 2); // Subtag (2 caracteres)
+        final subId = raw.substring(idx, idx + 2);
         idx += 2;
-
-        final subLen =
-            int.parse(raw.substring(idx, idx + 2)); // Longitud del valor
+        final subLen = int.tryParse(raw.substring(idx, idx + 2));
+        if (subLen == null) {
+          throw FormatException('Sub-length inválida para subtag $subId');
+        }
         idx += 2;
-
-        final subVal =
-            raw.substring(idx, idx + subLen); // Valor real del subtag
+        if (idx + subLen > raw.length) {
+          throw FormatException('Valor subtag $subId excede longitud');
+        }
+        final subVal = raw.substring(idx, idx + subLen);
         idx += subLen;
-
         map[subId] = subVal;
       }
       return map;
     }
 
-    // el Tag 26 es un caso particular dentro de la especificación EMVCo
-    // Ej: parsear el Tag 26 (Merchant Account Info) en caso de que exista
     final merchantAccountInfo =
         parsed.containsKey('26') ? parseTemplate(parsed['26']!) : {};
 
-    // interpretar el tipo de QR según el Tag 01 y el monto (Tag 54)
+    // interpretar el tipo de QR según Tag 01 y el monto (Tag 54)
     String initiationType(String? code, String? amount) {
-      if (code == '12') return 'Dinámico'; // QR dinámico
-      if (code == '11' && (double.tryParse(amount ?? '0') ?? 0) > 0) {
+      if (code == '12') return 'Dinámico';
+      if (code == '11' && (double.tryParse(amount ?? '') ?? 0) > 0) {
         return 'Estático con valor';
       }
       return 'Estático';
     }
 
+    // Limpiar posibles caracteres no numéricos del monto
+    final rawAmt = parsed['54'] ?? '';
+    final cleanAmt = rawAmt.replaceAll(RegExp(r'[^0-9.]'), '');
+    final amt = double.tryParse(cleanAmt) ?? 0.0;
+
     return EmvcoQrPayloadModel(
       payloadFormat: parsed['00'] ?? '',
-      initiationMethod:
-          initiationType(parsed['01'], parsed['54']), // Tag 01 + lógica
+      initiationMethod: initiationType(parsed['01'], parsed['54']),
       merchantCategoryCode: parsed['52'] ?? '',
       countryCode: parsed['58'] ?? '',
       merchantName: parsed['59'] ?? '',
       merchantCity: parsed['60'] ?? '',
       currencyCode: parsed['53'] ?? '',
-      transactionAmount: double.tryParse(parsed['54'] ?? '0') ?? 0.0,
+      transactionAmount: amt,
       crc: parsed['63'] ?? '',
       additionalFields: {
-        ...parsed, // Se incluyen todos los tags parseados
+        ...parsed,
         if (merchantAccountInfo.isNotEmpty) '26_subtags': merchantAccountInfo,
-        // Se guarda también los subtags del Tag 26 si existen
       },
     );
-  }
-
-  @override
-  String toString() {
-    return '''
-    EmvcoQrPayloadModel(
-      payloadFormat: $payloadFormat,
-      initiationMethod: $initiationMethod,
-      merchantCategoryCode: $merchantCategoryCode,
-      countryCode: $countryCode,
-      merchantName: $merchantName,
-      merchantCity: $merchantCity,
-      currencyCode: $currencyCode,
-      transactionAmount: $transactionAmount,
-      crc: $crc,
-      additionalFields: $additionalFields,
-    )''';
   }
 }

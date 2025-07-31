@@ -1,30 +1,31 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:test_qr/main.dart';
+import 'package:test_qr/model.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('EmvcoQrPayloadModel.fromPayload', () {
+    test('parses un QR estático sin subtags', () {
+      const payload =
+          '000201115203531530317054060012345802CO5907MiTienda6006Cucuta6304ABCD';
+      final model = EmvcoQrPayloadModel.fromPayload(payload);
+      expect(model.payloadFormat, '01');
+      expect(model.initiationMethod, 'Estático con valor');
+      expect(model.currencyCode, '170');
+      expect(model.transactionAmount, 1234.0);
+      expect(model.countryCode, 'CO');
+      expect(model.merchantCity, 'Cucuta');
+      expect(model.crc, 'ABCD');
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('identifica QR dinámico con monto y subtags en 26', () {
+      const payload = '0002010126...'; // incluye Tag 26 template
+      final model = EmvcoQrPayloadModel.fromPayload(payload);
+      expect(model.initiationMethod, 'Dinámico');
+      expect(model.additionalFields['26_subtags'], isA<Map<String, String>>());
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('falla si el payload está mal formado o length no coincide', () {
+      expect(() => EmvcoQrPayloadModel.fromPayload('XX'),
+          throwsA(isA<FormatException>()));
+    });
   });
 }
