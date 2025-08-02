@@ -1,6 +1,8 @@
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:test_qr/model.dart';
+import 'package:test_qr/picker.dart';
 
 class QRScanPage extends StatefulWidget {
   const QRScanPage({super.key});
@@ -10,14 +12,16 @@ class QRScanPage extends StatefulWidget {
 }
 
 class _QRScanPageState extends State<QRScanPage> {
-  final MobileScannerController controller =
-      MobileScannerController(formats: [BarcodeFormat.qrCode]);
+  // Inicialización única y definitiva
+  final MobileScannerController controller = MobileScannerController(
+    formats: [BarcodeFormat.qrCode],
+    detectionSpeed: DetectionSpeed.noDuplicates,
+  );
 
   bool _torchEnabled = false;
   String _qrResult = 'Apunta al QR…';
   bool isScanned = false;
-  bool?
-      _isRedeban; // null = no leído, true = sí es Redeban, false = no es Redeban
+  bool? _isRedeban;
 
   @override
   void dispose() {
@@ -34,14 +38,47 @@ class _QRScanPageState extends State<QRScanPage> {
     });
   }
 
+  Future<String?> scanQrFromGallery() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null) return null;
+
+    final BarcodeCapture? capture = await controller.analyzeImage(picked.path);
+    if (capture == null || capture.barcodes.isEmpty) return null;
+
+    return capture.barcodes.first.rawValue;
+  }
+
+  void _processPayload(String code) {
+    try {
+      final parsed = EmvcoQrPayloadModel.fromPayload(code);
+      setState(() {
+        _qrResult = '''
+          Formato: ${parsed.payloadFormat}
+          Tipo: ${parsed.initiationMethod}
+          Comercio: ${parsed.merchantName}
+          Ciudad: ${parsed.merchantCity}
+          Monto: ${parsed.transactionAmount}
+          Moneda: ${parsed.currencyCode}
+          CRC: ${parsed.crc}
+          ''';
+        _isRedeban = true;
+        isScanned = true;
+      });
+    } catch (e) {
+      setState(() {
+        _qrResult = 'Error al procesar el QR:\n$e';
+        _isRedeban = false;
+        isScanned = true;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _isRedeban == null
-          ? Colors.white // antes de escanear
-          : _isRedeban == true
-              ? Colors.green[200] // válido de Redeban
-              : Colors.red[200], // inválido / no Redeban
+          ? Colors.white
+          : (_isRedeban == true ? Colors.green[200] : Colors.red[200]),
       appBar: AppBar(
         title: const Text('Prueba aislada lector de QR'),
         actions: [
@@ -53,11 +90,18 @@ class _QRScanPageState extends State<QRScanPage> {
               setState(() => _torchEnabled = !_torchEnabled);
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.image),
+            tooltip: 'Leer QR desde galería',
+            onPressed: () async {
+              scanQrFromDesktop();
+            },
+          ),
         ],
       ),
       body: Column(
         children: [
-          if (!isScanned) ...[
+          if (!isScanned)
             Expanded(
               flex: 4,
               child: MobileScanner(
@@ -65,34 +109,12 @@ class _QRScanPageState extends State<QRScanPage> {
                 onDetect: (capture) {
                   final code = capture.barcodes.first.rawValue;
                   if (code != null && mounted) {
-                    controller.stop(); // Detiene tras escaneo exitoso
-                    try {
-                      final parsedQr = EmvcoQrPayloadModel.fromPayload(code);
-                      setState(() {
-                        _qrResult = '''
-Formato: ${parsedQr.payloadFormat}
-Tipo: ${parsedQr.initiationMethod}
-Comercio: ${parsedQr.merchantName}
-Ciudad: ${parsedQr.merchantCity}
-Monto: ${parsedQr.transactionAmount}
-Moneda: ${parsedQr.currencyCode}
-CRC: ${parsedQr.crc}
-                        ''';
-                        _isRedeban = true; // si no lanzó excepción es Redeban
-                        isScanned = true;
-                      });
-                    } catch (e) {
-                      setState(() {
-                        _qrResult = 'Error al procesar el QR:\n$e';
-                        _isRedeban = false; // no es Redeban
-                        isScanned = true;
-                      });
-                    }
+                    controller.stop();
+                    _processPayload(code);
                   }
                 },
               ),
             ),
-          ],
           Expanded(
             flex: 1,
             child: Center(

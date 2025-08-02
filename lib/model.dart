@@ -7,6 +7,7 @@
 
 //Formato EMVCo = siempre [TAG][LENGTH][VALUE].
 //web para generar payloads:
+
 class EmvcoQrPayloadModel {
   final String payloadFormat; // Tag 00
   final String initiationMethod; // Tag 01
