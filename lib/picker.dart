@@ -7,8 +7,9 @@ import 'package:image/image.dart'
 import 'package:qr_code_vision/qr_code_vision.dart'; // QR‑reader puro Dart para Web/Desktop
 import 'model.dart'; // Tu modelo EmvcoQrPayloadModel
 
-/// Método para desktop/web: abrir galería, decodificar imagen como RGBA, buscar QR y procesar
+//el metodo para mobile esta en home y es con el paquete mobile_scanner
 
+/// Método para desktop/web: abrir galería, decodificar imagen como RGBA, buscar QR y procesar
 Future<void> scanQrFromDesktop() async {
   try {
     // 1️⃣ Abrir selector de archivos (imagen desde disco / galería en desktop/web)

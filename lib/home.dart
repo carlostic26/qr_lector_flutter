@@ -2,7 +2,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:test_qr/model.dart';
-import 'package:test_qr/picker.dart';
 
 class QRScanPage extends StatefulWidget {
   const QRScanPage({super.key});
@@ -94,7 +93,11 @@ class _QRScanPageState extends State<QRScanPage> {
             icon: const Icon(Icons.image),
             tooltip: 'Leer QR desde galería',
             onPressed: () async {
-              scanQrFromDesktop();
+              final result = await scanQrFromGallery();
+              if (result != null && mounted) {
+                controller.stop();
+                _processPayload(result);
+              }
             },
           ),
         ],
